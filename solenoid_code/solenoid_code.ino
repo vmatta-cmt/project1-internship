@@ -9,10 +9,6 @@ bool paused = false;
 bool sweepRunning = false;
 bool disclaimerShown = false;
 
-bool firstFreqRepeated = false;
-int repeatCount = 0;
-int firstFreqValue = 1;
-
 int sweepFrequencies[] = {
   2, 3, 4, 5, 6, 7, 8, 10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 24, 25,
   26, 27, 28, 29, 30, 31, 66, 67, 68, 70, 71, 72, 73, 74, 75, 76, 77,
@@ -40,11 +36,14 @@ void setup() {
   }
 
   Serial.println("Commands:");
-  Serial.println("  'auto'   → Auto sweep (1 Hz x2, then working freqs)");
-  Serial.println("  'custom' → Enter your own sweep (start freq x2, rest once)");
+  Serial.println("  'auto'   → Auto sweep (all valid freqs once)");
+  Serial.println("  'custom' → Enter your own sweep (only valid freqs will run)");
   Serial.println("  'pause'  → Pause the sweep");
   Serial.println("  'resume' → Resume the sweep");
   Serial.print("> ");
+
+  // ✅ Start immediately — no delay before first ON
+  phaseStartTime = millis() - 6000;
 }
 
 void loop() {
@@ -76,17 +75,7 @@ void loop() {
     pwmOn = false;
     phaseStartTime = now;
 
-    if (!firstFreqRepeated) {
-      if (repeatCount == 0) {
-        repeatCount++;  // Repeat first frequency once
-        return;
-      } else {
-        firstFreqRepeated = true;
-        repeatCount = 0;
-      }
-    }
-
-    // === Frequency Update ===
+    // === Advance Frequency ===
     if (useAutoList) {
       sweepIndex++;
       if (sweepIndex >= sweepCount) {
@@ -109,10 +98,6 @@ void loop() {
       }
       currentFreq = nextFreq;
     }
-
-    // Repeat new first frequency
-    firstFreqRepeated = false;
-    repeatCount = 0;
   }
 }
 
@@ -148,13 +133,10 @@ void handleSerialInput() {
     if (input == "auto") {
       useAutoList = true;
       sweepIndex = 0;
-      firstFreqValue = 1;
-      currentFreq = firstFreqValue;
-      firstFreqRepeated = false;
-      repeatCount = 0;
+      currentFreq = sweepFrequencies[sweepIndex];
       sweepRunning = true;
-      phaseStartTime = millis();
-      Serial.println("[Auto sweep starting: 1 Hz x2, then known working freqs]");
+      phaseStartTime = millis() - 6000;
+      Serial.println("[Auto sweep starting]");
       return;
     }
 
@@ -169,7 +151,7 @@ void handleSerialInput() {
       int val = input.toInt();
       if (inputStep == 0) {
         userStartFreq = val;
-        firstFreqValue = userStartFreq;
+        currentFreq = userStartFreq;
         Serial.println("Enter end frequency:");
         inputStep++;
       } else if (inputStep == 1) {
@@ -178,13 +160,10 @@ void handleSerialInput() {
         inputStep++;
       } else if (inputStep == 2) {
         userStep = val;
-        currentFreq = firstFreqValue;
-        firstFreqRepeated = false;
-        repeatCount = 0;
         sweepRunning = true;
         inputStep = 0;
-        phaseStartTime = millis();
-        Serial.println("[Custom sweep starting: first freq x2, then rest once]");
+        phaseStartTime = millis() - 6000;
+        Serial.println("[Custom sweep starting]");
       }
     }
 
@@ -201,10 +180,10 @@ void setupTimer1(int freq) {
   TCCR1A = 0;
   TCCR1B = 0;
 
-  TCCR1A |= (1 << COM1A1);  // Non-inverting mode on OC1A
-  TCCR1A |= (1 << WGM11);   // Fast PWM
+  TCCR1A |= (1 << COM1A1);
+  TCCR1A |= (1 << WGM11);
   TCCR1B |= (1 << WGM12) | (1 << WGM13);
-  TCCR1B |= (1 << CS12) | (1 << CS10);  // Prescaler = 1024
+  TCCR1B |= (1 << CS12) | (1 << CS10);
 }
 
 void disablePWMOutput() {
@@ -221,5 +200,5 @@ void setPWMFreqHz(int freq) {
   if (top < 2) top = 2;
 
   ICR1 = top;
-  OCR1A = top / 2;  // 50% duty cycle
+  OCR1A = top / 2;
 }
