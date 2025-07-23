@@ -36,14 +36,11 @@ void setup() {
   }
 
   Serial.println("Commands:");
-  Serial.println("  'auto'   → Auto sweep (all valid freqs once)");
-  Serial.println("  'custom' → Enter your own sweep (only valid freqs will run)");
+  Serial.println("  'auto'   → Auto sweep (valid freqs once)");
+  Serial.println("  'custom' → Enter your own sweep (valid range only)");
   Serial.println("  'pause'  → Pause the sweep");
   Serial.println("  'resume' → Resume the sweep");
   Serial.print("> ");
-
-  // ✅ Start immediately — no delay before first ON
-  phaseStartTime = millis() - 6000;
 }
 
 void loop() {
@@ -57,7 +54,7 @@ void loop() {
   unsigned long now = millis();
 
   // === Start ON Phase ===
-  if (!pwmOn && (now - phaseStartTime >= 6000)) {
+  if (!pwmOn && now - phaseStartTime >= 6000) {
     setupTimer1(currentFreq);
     Serial.print("PWM ON at ");
     Serial.print(currentFreq);
@@ -68,14 +65,13 @@ void loop() {
   }
 
   // === End ON Phase ===
-  if (pwmOn && (now - phaseStartTime >= 2000)) {
+  if (pwmOn && now - phaseStartTime >= 2000) {
     disablePWMOutput();
     Serial.println("PWM OFF");
 
     pwmOn = false;
     phaseStartTime = now;
 
-    // === Advance Frequency ===
     if (useAutoList) {
       sweepIndex++;
       if (sweepIndex >= sweepCount) {
@@ -135,7 +131,7 @@ void handleSerialInput() {
       sweepIndex = 0;
       currentFreq = sweepFrequencies[sweepIndex];
       sweepRunning = true;
-      phaseStartTime = millis() - 6000;
+      phaseStartTime = millis() - 6000;  // Start immediately
       Serial.println("[Auto sweep starting]");
       return;
     }
@@ -162,12 +158,12 @@ void handleSerialInput() {
         userStep = val;
         sweepRunning = true;
         inputStep = 0;
-        phaseStartTime = millis() - 6000;
+        phaseStartTime = millis() - 6000;  // Start immediately
         Serial.println("[Custom sweep starting]");
       }
     }
 
-    while (Serial.available()) Serial.read();  // Clear buffer
+    while (Serial.available()) Serial.read();
   }
 }
 
