@@ -7,6 +7,7 @@ unsigned long phaseStartTime = 0;
 bool pwmOn = false;
 bool paused = false;
 bool sweepRunning = false;
+bool wakeRunning = false;
 bool disclaimerShown = false;
 
 int sweepFrequencies[] = {
@@ -38,6 +39,7 @@ void setup() {
   Serial.println("Commands:");
   Serial.println("  'auto'   → Auto sweep (valid freqs once)");
   Serial.println("  'custom' → Enter your own sweep (valid range only)");
+  Serial.println("  'wake'   → Wake mode (pulse every 10s)");
   Serial.println("  'pause'  → Pause the sweep");
   Serial.println("  'resume' → Resume the sweep");
   Serial.print("> ");
@@ -46,12 +48,32 @@ void setup() {
 void loop() {
   handleSerialInput();
 
-  if (!sweepRunning || paused) {
+  if (paused) {
     disablePWMOutput();
     return;
   }
 
   unsigned long now = millis();
+
+  // === Wake Mode ===
+  if (wakeRunning) {
+    static unsigned long lastWakeTime = 0;
+    if (now - lastWakeTime >= 10000) {  // Every 10 seconds
+      setupTimer1(10); // 10 Hz for pulse (adjust if needed)
+      Serial.println("[Wake pulse ON]");
+      delay(100);
+      disablePWMOutput();
+      Serial.println("[Wake pulse OFF]");
+      lastWakeTime = now;
+    }
+    return;
+  }
+
+  // === Sweep Mode ===
+  if (!sweepRunning) {
+    disablePWMOutput();
+    return;
+  }
 
   // === Start ON Phase ===
   if (!pwmOn && now - phaseStartTime >= 6000) {
@@ -131,6 +153,7 @@ void handleSerialInput() {
       sweepIndex = 0;
       currentFreq = sweepFrequencies[sweepIndex];
       sweepRunning = true;
+      wakeRunning = false;
       phaseStartTime = millis() - 6000;  // Start immediately
       Serial.println("[Auto sweep starting]");
       return;
@@ -139,7 +162,17 @@ void handleSerialInput() {
     if (input == "custom") {
       useAutoList = false;
       inputStep = 0;
+      sweepRunning = false;
+      wakeRunning = false;
       Serial.println("Enter start frequency:");
+      return;
+    }
+
+    if (input == "wake") {
+      sweepRunning = false;
+      wakeRunning = true;
+      phaseStartTime = millis();
+      Serial.println("[Wake mode activated: 100ms pulse every 10s]");
       return;
     }
 
